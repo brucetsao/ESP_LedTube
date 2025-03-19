@@ -41,8 +41,7 @@ void ACCESSon();                           // 開啟控制板上的連線指示�
 void ACCESSoff();                          // 關閉控制板上的連線指示燈
 
 // 產生 MQTT Client ID 的函數，根據設備的 MAC 地址生成
-void fillCID(String mm) 
-{
+void fillCID(String mm) {
     // 功能：根據傳入的 MAC 地址字串 (mm) 生成唯一的 MQTT Client ID
     clintid[0] = 't';             // Client ID 的第一個字元設為 't'
     clintid[1] = 'w';             // Client ID 的第二個字元設為 'w'，組成 "tw" 前綴
@@ -54,8 +53,7 @@ void fillCID(String mm)
 }
 
 // 產生 MQTT Publish 與 Subscribe 主題的函數
-void fillTopic(String mm) 
-{
+void fillTopic(String mm) {
     // 功能：根據傳入的 MAC 地址字串 (mm) 格式化發佈與訂閱的主題
     sprintf(PubTopicbuffer, PubTop, mm.c_str()); // 使用 PubTop 模板生成發佈主題，填入 MAC 地址
     Serial.print("Publish Topic Name:(");        // 在序列埠監控器中印出提示文字
@@ -68,34 +66,7 @@ void fillTopic(String mm)
 }
 
 // 產生 MQTT 訊息 (Payload) 的函數
-void fillPayload(String mm, String ss, String cc, int rr, int gg, int bb) 
-{
-   /*
-   傳入下列json需要變數，產生下列json內容
-    {
-    "Device":"AABBCCDDEEGG",
-    "Style":"MONO"/"COLOR",
-    "Command":"ON"/"OFF",
-    "Color":
-      { 
-      "R":255,
-      "G":255,
-      "B":255
-      }
-    }   
-
-    {
-    "Device":"AABBCCDDEEGG",
-    "Style":MONO,
-    "Command":ON,
-    "Color":
-      { 
-      "R":255,
-      "G":255,
-      "B":255
-      }
-    }  
-    */ 
+void fillPayload(String mm, String ss, String cc, int rr, int gg, int bb) {
     // 功能：根據傳入的參數生成 JSON 格式的訊息內容
     // 參數說明：
     // mm：設備 ID (MAC 地址)，ss：模式 (MONO 或 COLOR)，cc：命令 (ON 或 OFF)
@@ -108,8 +79,7 @@ void fillPayload(String mm, String ss, String cc, int rr, int gg, int bb)
 }
 
 // 初始化 MQTT 連線的函數
-void initMQTT() 
-{
+void initMQTT() {
     ACCESSon();                    // 開啟連線指示燈，表示正在進行連線
     fillCID(MacData);              // 根據設備的 MAC 地址生成 Client ID
     fillTopic(MacData);            // 根據設備的 MAC 地址生成發佈與訂閱主題
@@ -120,8 +90,7 @@ void initMQTT()
 }
 
 // MQTT 回呼函數，處理接收到的訊息
-void mycallback(char* topic, byte* payload, unsigned int length) 
-{
+void mycallback(char* topic, byte* payload, unsigned int length) {
     ACCESSon();                    // 開啟連線指示燈，表示正在處理訊息
     Serial.print("Message arrived ["); // 在序列埠監控器中印出提示文字
     Serial.print(topic);               // 印出接收到的主題名稱
@@ -137,42 +106,96 @@ void mycallback(char* topic, byte* payload, unsigned int length)
 
     // 解析 JSON 資料
     DeserializationError error = deserializeJson(json_doc, json_data); 
-    if (error) 
-    {                       // 如果解析失敗
+    if (error) {                       // 如果解析失敗
         Serial.print(F("deserializeJson() failed: ")); // 印出錯誤提示
         Serial.println(error.c_str()); // 印出錯誤訊息
         return;                        // 結束函數執行
     }
 
     // 檢查設備 ID 是否匹配
-    if (json_doc["Device"] == MacData) 
-    { // 如果接收到的設備 ID 與本機 MAC 地址相符
-        if (json_doc["Style"] == "COLOR") 
-        { 
-          // 如果模式為 "COLOR"，表示控制彩色燈
-          int r = json_doc["Color"]["R"]; // 取得紅色值
-          int g = json_doc["Color"]["G"]; // 取得綠色值
-          int b = json_doc["Color"]["B"]; // 取得藍色值
-          ChangeBulbColor(r, g, b);       // 呼叫函數改變燈泡顏色
-          Serial.println("改變燈泡顏色函數"); // 印出提示文字
-        } else if (json_doc["Style"] == "MONO") 
-          { // 如果模式為 "MONO"，表示控制單色燈 (白光)
-              if (json_doc["Command"] == "ON") {    // 如果命令為 "ON"
-                  TurnOnBulb();                     // 開啟燈泡 (白光全亮)
-                  Serial.println("開啟燈泡全亮");   // 印出提示文字
-              } else if (json_doc["Command"] == "OFF") { // 如果命令為 "OFF"
-                  TurnOffBulb();                    // 關閉燈泡 (全暗)
-                  Serial.println("關閉燈泡全暗");   // 印出提示文字
-              }
-          } 
-          else 
-          { // 如果模式不是 "COLOR" 或 "MONO"
+    if (json_doc["Device"] == MacData) { // 如果接收到的設備 ID 與本機 MAC 地址相符
+        if (json_doc["Style"] == "COLOR") { // 如果模式為 "COLOR"，表示控制彩色燈
+            int r = json_doc["Color"]["R"]; // 取得紅色值
+            int g = json_doc["Color"]["G"]; // 取得綠色值
+            int b = json_doc["Color"]["B"]; // 取得藍色值
+            ChangeBulbColor(r, g, b);       // 呼叫函數改變燈泡顏色
+            Serial.println("改變燈泡顏色函數"); // 印出提示文字
+        } else if (json_doc["Style"] == "MONO") { // 如果模式為 "MONO"，表示控制單色燈 (白光)
+            if (json_doc["Command"] == "ON") {    // 如果命令為 "ON"
+                TurnOnBulb();                     // 開啟燈泡 (白光全亮)
+                Serial.println("開啟燈泡全亮");   // 印出提示文字
+            } else if (json_doc["Command"] == "OFF") { // 如果命令為 "OFF"
+                TurnOffBulb();                    // 關閉燈泡 (全暗)
+                Serial.println("關閉燈泡全暗");   // 印出提示文字
+            }
+        } else { // 如果模式不是 "COLOR" 或 "MONO"
             Serial.println("(json_doc[\"Style\"] == \"COLOR\")err"); // 印出錯誤訊息
-          }
-    } 
-    else 
-    { // 如果設備 ID 不匹配
+        }
+    } else { // 如果設備 ID 不匹配
         Serial.println("(json_doc[\"Device\"] == MacData)err"); // 印出錯誤訊息
     }
     ACCESSoff(); // 關閉連線指示燈，表示訊息處理完成
 }
+
+-------------------------------------
+程式原理與解釋
+程式目的
+這段程式是用於 Arduino 平台的 MQTT 客戶端程式，主要功能是透過 MQTT 協議與遠端的 MQTT Broker 通訊，實現對燈泡的控制。程式可以：
+
+根據設備的 MAC 地址生成唯一的 Client ID 與 MQTT 主題。
+透過 MQTT 訂閱 (Subscribe) 主題接收控制指令。
+解析接收到的 JSON 格式訊息，根據指令改變燈泡的狀態（彩色模式或單色模式的開/關）。
+提供發佈 (Publish) 功能，將設備狀態回報給 MQTT Broker。
+程式結構與流程
+前置設定與變數定義
+引入必要的函式庫 (JSONLib.h 和 PubSubClient.h)，用於 JSON 處理與 MQTT 通訊。
+定義 MQTT Broker 的連線資訊（伺服器地址、通訊埠等）及相關變數（主題、訊息緩衝區等）。
+定義控制燈泡的函數原型，例如改變顏色 (ChangeBulbColor)、開啟 (TurnOnBulb)、關閉 (TurnOffBulb)。
+初始化 MQTT 連線
+initMQTT() 函數負責設定 MQTT 伺服器並註冊回呼函數 (mycallback)。
+使用設備的 MAC 地址生成唯一的 Client ID 和主題名稱。
+訊息生成與發佈
+fillPayload() 函數根據傳入的參數生成 JSON 格式的訊息，例如設備 ID、模式、命令及 RGB 值。
+訊息格式符合預定義的模板，用於與其他設備或應用程式通訊。
+訊息接收與處理
+mycallback() 是回呼函數，當訂閱的主題有新訊息時觸發。
+函數將接收到的 byte 資料轉換為字串，解析其中的 JSON 內容。
+根據 JSON 中的 "Device"、"Style" 和 "Command" 欄位，執行對應的燈泡控制動作：
+如果 "Style" 為 "COLOR"，則改變燈泡的 RGB 顏色。
+如果 "Style" 為 "MONO"，則根據 "Command" 開啟或關閉白光燈泡。
+指示燈控制
+使用 ACCESSon() 和 ACCESSoff() 控制連線指示燈，提示程式運行狀態。
+使用 WiFion() 和 WiFioff() 控制 WiFi 指示燈（程式中未實作具體邏輯，需自行定義）。
+MQTT 通訊原理
+MQTT 協議：一種輕量級的發佈/訂閱訊息傳輸協議，適合物聯網應用。
+Broker：中介伺服器，負責接收與分發訊息（這裡使用 broker.emqx.io）。
+Publish：設備發送訊息到特定主題，例如回報狀態。
+Subscribe：設備訂閱主題以接收訊息，例如接收控制指令。
+主題結構：使用層次結構，例如 /arduinoorg/Led/AABBCCDDEEGG，其中 AABBCCDDEEGG 是設備的 MAC 地址。
+JSON 格式解析
+使用 JSONLib.h 解析接收到的訊息，例如：
+json
+
+收起
+
+換行
+
+複製
+{
+  "Device": "AABBCCDDEEGG",
+  "Style": "COLOR",
+  "Command": "ON",
+  "Color": {
+    "R": 255,
+    "G": 0,
+    "B": 0
+  }
+}
+程式檢查 "Device" 是否匹配本機 MAC 地址，然後根據 "Style" 和 "Command" 執行相應動作。
+未實作的部分
+程式中定義了 ChangeBulbColor()、TurnOnBulb()、TurnOffBulb() 等函數，但未提供實作細節。這些函數需要根據硬體（例如 RGB LED 或單色 LED）自行撰寫，例如使用 PWM 控制燈泡亮度與顏色。
+WiFi 連線部分未包含，需搭配 ESP8266 或 ESP32 的 WiFi 模組並加入相關初始化程式碼。
+應用場景
+這段程式可用於智慧家居系統，例如遠端控制 LED 燈的顏色與開關。
+可擴展至多設備協作，透過 MQTT Broker 實現集中控制。
+希望這些註解與解釋能幫助你更好地理解程式！如果有其他問題，歡迎繼續提問。

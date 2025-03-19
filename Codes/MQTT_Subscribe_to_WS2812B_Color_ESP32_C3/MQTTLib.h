@@ -1,73 +1,74 @@
-#include "JSONLib.h"     // 腳位與系統模組
-#include <PubSubClient.h> //將MQTT Broker函式加入
+#include "JSONLib.h"     // 引入 JSON 處理函式庫，用於解析和生成 JSON 格式資料
+#include <PubSubClient.h> // 引入 MQTT 通訊函式庫，用於與 MQTT Broker 進行訊息的發送與接收
 
-#define MQTTServer "broker.emqx.io"   //網路常用之MQTT Broker網址
-#define MQTTPort 1883 //網路常用之MQTT Broker之通訊埠
-char* MQTTUser = "";  // 不須帳密
-char* MQTTPassword = "";    // 不須帳密
+// 定義 MQTT Broker 的連線資訊
+#define MQTTServer "broker.emqx.io"   // MQTT Broker 的網址，這裡使用公開的 EMQX 測試伺服器
+#define MQTTPort 1883                 // MQTT Broker 的通訊埠，1883 是標準 MQTT 通訊埠
+char* MQTTUser = "";                  // MQTT 使用者名稱，這裡留空表示不需要帳號驗證
+char* MQTTPassword = "";              // MQTT 密碼，這裡留空表示不需要密碼驗證
 
-WiFiClient mqclient ;  //　ｗｅｂ　ｓｏｃｋｅｔ　元件
-PubSubClient mqttclient(mqclient)  ;   //　MQTT Broker　元件 ，用PubSubClient類別產生一個 MQTT物件
+WiFiClient mqclient;                  // 創建一個 WiFiClient 物件，用於建立 WebSocket 連線
+PubSubClient mqttclient(mqclient);    // 創建一個 PubSubClient 物件，基於 WiFiClient，用於 MQTT 通訊
 
-String payloadStr ;
+String payloadStr;                    // 定義一個字串變數，用於儲存 MQTT 訊息的內容
 
+// MQTT 主題 (Topic) 定義
+const char* PubTop = "/arduinoorg/Led/%s"; // 定義發佈 (Publish) 主題的格式，%s 會被設備 ID 替換
+const char* SubTop = "/arduinoorg/Led/#";  // 定義訂閱 (Subscribe) 主題的格式，# 表示通配符，訂閱所有相關子主題
+String TopicT;                             // 暫存主題的字串變數
+char SubTopicbuffer[200];                  // 用於儲存訂閱主題的字元陣列，容量為 200 字元
+char PubTopicbuffer[200];                  // 用於儲存發佈主題的字元陣列，容量為 200 字元
 
-//MQTT Server Use
-const char* PubTop = "/arduinoorg/Led/%s" ;
-const char* SubTop = "/arduinoorg/Led/#" ;
-String TopicT;
-char SubTopicbuffer[200];   //MQTT Broker Subscribe TOPIC變數
-char PubTopicbuffer[200]; //MQTT Broker Publish TOPIC變數
+// MQTT 訊息 (Payload) 格式與相關變數
+const char* PrePayload = "{\"Device\":\"%s\",\"Style\":%s,\"Command\":%s,\"Color\":{\"R\":%d,\"G\":%d,\"B\":%d}}"; 
+// 定義 JSON 格式的訊息模板，包含設備 ID、模式、命令及 RGB 顏色值
+String PayloadT;                           // 暫存訊息的字串變數
+char Payloadbuffer[250];                   // 用於儲存訊息內容的字元陣列，容量為 250 字元
+char clintid[20];                          // 用於儲存 MQTT Client ID 的字元陣列，容量為 20 字元
 
-//Publish & Subscribe use
-const char* PrePayload = "{\"Device\":\"%s\",\"Style\":%s,\"Command\":%s,\"Color\":{\"R\":%d,\"G\":%d,\"B\":%d}}" ;
-String PayloadT;
-char Payloadbuffer[250];
-char clintid[20]; //MQTT Broker Client ID
+// MQTT 連線與迴圈間隔時間
+#define MQTT_RECONNECT_INTERVAL 100        // MQTT 重新連線的間隔時間，單位為毫秒 (ms)
+#define MQTT_LOOP_INTERVAL      50         // MQTT 主迴圈的執行間隔時間，單位為毫秒 (ms)
 
-#define MQTT_RECONNECT_INTERVAL 100                   // millisecond
-#define MQTT_LOOP_INTERVAL      50                    // millisecond
+// 函數宣告
+void mycallback(char* topic, byte* payload, unsigned int length); // MQTT 回呼函數，處理接收到的訊息
+void ChangeBulbColor(int r, int g, int b); // 改變燈泡顏色的函數，接收 RGB 值
+void TurnOnBulb();                         // 開啟燈泡全亮函數，設定為白光全亮
+void TurnOffBulb();                        // 關閉燈泡函數，設定為全暗
+void WiFion();                             // 開啟控制板上的 WiFi 指示燈
+void WiFioff();                            // 關閉控制板上的 WiFi 指示燈
+void ACCESSon();                           // 開啟控制板上的連線指示燈
+void ACCESSoff();                          // 關閉控制板上的連線指示燈
 
-
-void mycallback(char* topic, byte* payload, unsigned int length)  ;
-void ChangeBulbColor(int r,int g,int b);// 改變燈泡顏色函數
-void WiFion() ;//控制板上Wifi 指示燈打開
-void WiFioff();   //控制板上Wifi 指示燈關閉
-void ACCESSon(); //控制板上連線指示燈打開
-void ACCESSoff(); //控制板上連線指示燈關閉
-
-//產生MQTT Broker Client ID:依裝置 MAC產生(傳入之String mm) 
-void fillCID(String mm) //產生MQTT Broker Client ID:依裝置 MAC產生(傳入之String mm) 
-{
-    // 產生MQTT Broker Client ID:依裝置 MAC產生
-    //compose clientid with "tw"+MAC 
-  clintid[0]= 't' ;  //Client開頭第一個字
-  clintid[1]= 'w' ;  //Client開頭第二個字 
-      mm.toCharArray(&clintid[2],mm.length()+1) ;//將傳入之String mm拆解成字元陣列
-    clintid[2+mm.length()+1] = '\n' ; //將字元陣列最後加上\n作為結尾
-    Serial.print("Client ID:(") ; // 串列埠印出Client ID:(
-    Serial.print(clintid) ;     // 串列埠印出clintid 變數內容
-    Serial.print(") \n") ;  // 串列埠印出) \n
-    
+// 產生 MQTT Client ID 的函數，根據設備的 MAC 地址生成
+void fillCID(String mm) {
+    // 功能：根據傳入的 MAC 地址字串 (mm) 生成唯一的 MQTT Client ID
+    clintid[0] = 't';             // Client ID 的第一個字元設為 't'
+    clintid[1] = 'w';             // Client ID 的第二個字元設為 'w'，組成 "tw" 前綴
+    mm.toCharArray(&clintid[2], mm.length() + 1); // 將 MAC 地址字串轉換為字元陣列，從第 3 個位置開始填入
+    clintid[2 + mm.length()] = '\0'; // 在字元陣列結尾加上空字元 '\0'，表示字串結束
+    Serial.print("Client ID:(");  // 在序列埠監控器中印出提示文字
+    Serial.print(clintid);        // 印出生成的 Client ID
+    Serial.print(") \n");         // 印出括號與換行符號
 }
 
-//依傳入之String mm 產生MQTT Broker Publish TOPIC 與 Subscribe TOPIC 
-void fillTopic(String mm) //依傳入之String mm 產生MQTT Broker Publish TOPIC 與 Subscribe TOPIC 
-{
-  sprintf(PubTopicbuffer,PubTop,mm.c_str()) ;//根據PubTopicbuffer格式化字串，將mm.c_str()內容填入
-      Serial.print("Publish Topic Name:(") ;  // 串列埠印出Publish Topic Name:(
-    Serial.print(PubTopicbuffer) ;  // 串列埠印出PubTopicbuffer 變數內容
-    Serial.print(") \n") ;  // 串列埠印出) \n
-  sprintf(SubTopicbuffer,SubTop,mm.c_str()) ; //SubTopicbuffer，將mm.c_str()內容填入
-      Serial.print("Subscribe Topic Name:(") ;  // 串列埠印出Subscribe Topic Name:(
-    Serial.print(SubTopicbuffer) ;  // 串列埠印出SubTopicbuffer 變數內容
-    Serial.print(") \n")  ;  // 串列埠印出) \n
+// 產生 MQTT Publish 與 Subscribe 主題的函數
+void fillTopic(String mm) {
+    // 功能：根據傳入的 MAC 地址字串 (mm) 格式化發佈與訂閱的主題
+    sprintf(PubTopicbuffer, PubTop, mm.c_str()); // 使用 PubTop 模板生成發佈主題，填入 MAC 地址
+    Serial.print("Publish Topic Name:(");        // 在序列埠監控器中印出提示文字
+    Serial.print(PubTopicbuffer);                // 印出生成的發佈主題
+    Serial.print(") \n");                        // 印出括號與換行符號
+    sprintf(SubTopicbuffer, SubTop);             // 使用 SubTop 模板生成訂閱主題（這裡未填入 %s，因為 SubTop 使用通配符 #）
+    Serial.print("Subscribe Topic Name:(");      // 在序列埠監控器中印出提示文字
+    Serial.print(SubTopicbuffer);                // 印出生成的訂閱主題
+    Serial.print(") \n");                        // 印出括號與換行符號
 }
 
-// 傳入下列json需要變數，產生下列json內容
-void fillPayload(String mm,String ss, String cc,int rr,int gg,int bb)
+// 產生 MQTT 訊息 (Payload) 的函數
+void fillPayload(String mm, String ss, String cc, int rr, int gg, int bb) 
 {
-  /*
+   /*
    傳入下列json需要變數，產生下列json內容
     {
     "Device":"AABBCCDDEEGG",
@@ -92,30 +93,27 @@ void fillPayload(String mm,String ss, String cc,int rr,int gg,int bb)
       "B":255
       }
     }  
-    */
-  sprintf(Payloadbuffer,PrePayload,mm.c_str(),ss.c_str(),cc.c_str(),rr,gg,bb) ; ;
-      Serial.print("Payload Content:(") ;
-    Serial.print(Payloadbuffer) ;
-    Serial.print(") \n") ;
+    */ 
+    // 功能：根據傳入的參數生成 JSON 格式的訊息內容
+    // 參數說明：
+    // mm：設備 ID (MAC 地址)，ss：模式 (MONO 或 COLOR)，cc：命令 (ON 或 OFF)
+    // rr, gg, bb：RGB 顏色值 (0-255)
+    sprintf(Payloadbuffer, PrePayload, mm.c_str(), ss.c_str(), cc.c_str(), rr, gg, bb); 
+    // 使用 PrePayload 模板格式化訊息，將參數填入對應位置
+    Serial.print("Payload Content:(");  // 在序列埠監控器中印出提示文字
+    Serial.print(Payloadbuffer);        // 印出生成的訊息內容
+    Serial.print(") \n");               // 印出括號與換行符號
 }
 
-
-void initMQTT() //起始MQTT Broker連線
-{
-    ACCESSon(); //控制板上連線指示燈打開
-    void initjson(); //初始化json元件
-    fillCID(MacData) ;  //產生MQTT Broker Client ID
-    fillTopic(MacData) ;    //依傳入之String mm 產生MQTT Broker Publish TOPIC 與 Subscribe TOPIC 
-
-    mqttclient.setServer(MQTTServer, MQTTPort);//設定連線MQTT Broker伺服器之資料
-    Serial.println("Now Set MQTT Server") ; // 串列埠印出Now Set MQTT Server內容
-  //連接MQTT Server ， Servar name :MQTTServer， Server Port :MQTTPort
-  //broker.emqx.io:18832
-  mqttclient.setCallback(mycallback);
-  // 設定MQTT Server ， 有subscribed的topic有訊息時，通知的函數
-      
-//--------------------------    
-  ACCESSon(); //控制板上連線指示燈打開
+// 初始化 MQTT 連線的函數
+void initMQTT() {
+    ACCESSon();                    // 開啟連線指示燈，表示正在進行連線
+    fillCID(MacData);              // 根據設備的 MAC 地址生成 Client ID
+    fillTopic(MacData);            // 根據設備的 MAC 地址生成發佈與訂閱主題
+    mqttclient.setServer(MQTTServer, MQTTPort); // 設定 MQTT Broker 的伺服器地址與通訊埠
+    Serial.println("Now Set MQTT Server");      // 在序列埠監控器中印出提示文字
+    mqttclient.setCallback(mycallback);         // 設定回呼函數，當接收到訂閱主題的訊息時觸發 mycallback
+    ACCESSon();                                 // 再次開啟連線指示燈，表示連線設定完成
 }
 
 void mycallback(char* topic, byte* payload, unsigned int length) 
